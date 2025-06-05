@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>To-Do List dengan Pengingat Deadline</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f4f8;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #3f72af;
+    }
+    input[type="text"], input[type="datetime-local"] {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      margin: 5px 3px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background-color: #3f72af;
+      color: white;
+      cursor: pointer;
+      user-select: none;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    li {
+      background: #e8f0fe;
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    .done-item {
+      background-color: #f8d7da !important; /* merah muda lembut */
+    }
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .button-group {
+      display: flex;
+      gap: 4px;
+    }
+    .icon-btn {
+      background: none;
+      border: 1px solid #3f72af;
+      color: #3f72af;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .icon-btn:hover {
+      background-color: #3f72af;
+      color: white;
+    }
+    .deadline {
+      font-size: 12px;
+      color: #555;
+      margin-top: 4px;
+    }
+    .done {
+      text-decoration: line-through;
+      color: gray;
+    }
+    .near-deadline {
+      background-color: #ffeb3b !important; /* kuning cerah */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>To-Do List</h1>
+    <input type="text" id="taskInput" placeholder="Masukkan tugas..." />
+    <input type="datetime-local" id="deadlineInput" />
+    <button onclick="addTask()">Tambah Tugas</button>
+    <button onclick="undoTask()">Undo</button>
+    <button onclick="resetTask()">Reset Semua</button>
+    <ul id="taskList"></ul>
+  </div>
+
+  <script>
+    let taskList = JSON.parse(localStorage.getItem("taskList")) || [];
+    let undoStack = JSON.parse(localStorage.getItem("undoStack")) || [];
+
+    function renderTasks() {
+      const taskListElement = document.getElementById("taskList");
+      taskListElement.innerHTML = "";
+      const now = new Date();
+
+      taskList.forEach((task, index) => {
+        const li = document.createElement("li");
+
+        // Background tugas selesai atau hampir deadline
+        if (task.done) {
+          li.classList.add("done-item");
+        } else if (task.deadline) {
+          const deadlineDate = new Date(task.deadline);
+          const diffMs = deadlineDate - now;
+          if (diffMs > 0 && diffMs <= 3600000) { // kurang dari 1 jam
+            li.classList.add("near-deadline");
+            if (!task.notified) {
+              alert(`Deadline tugas "${task.text}" kurang dari 1 jam! Ayo segera kerjakan!`);
+              task.notified = true;
+              saveTasks();
+            }
+          }
+        }
+
+        const topRow = document.createElement("div");
+        topRow.className = "top-row";
+
+        const textSpan = document.createElement("span");
+        textSpan.textContent = task.text;
+        if (task.done) {
+          textSpan.classList.add("done");
+        }
+
+        const buttonGroup = document.createElement("div");
+        buttonGroup.className = "button-group";
+
+        const doneBtn = document.createElement("button");
+        doneBtn.textContent = "Selesai";
+        doneBtn.className = "icon-btn";
+        doneBtn.onclick = () => toggleDone(index);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Hapus";
+        deleteBtn.className = "icon-btn";
+        deleteBtn.onclick = () => deleteTask(index);
+
+        buttonGroup.appendChild(doneBtn);
+        buttonGroup.appendChild(deleteBtn);
+
+        topRow.appendChild(textSpan);
+        topRow.appendChild(buttonGroup);
+        li.appendChild(topRow);
+
+        if (task.deadline) {
+          const deadline = document.createElement("div");
+          deadline.className = "deadline";
+          deadline.textContent = "Deadline: " + new Date(task.deadline).toLocaleString();
+          li.appendChild(deadline);
+        }
+
+        taskListElement.appendChild(li);
+      });
+
+      saveTasks();
+    }
+
+    function addTask() {
+      const taskInput = document.getElementById("taskInput");
+      const deadlineInput = document.getElementById("deadlineInput");
+      const text = taskInput.value.trim();
+      const deadline = deadlineInput.value;
+
+      if (text !== "") {
+        undoStack.push(JSON.parse(JSON.stringify(taskList)));
+        taskList.push({ text, deadline, done: false, notified: false });
+        taskInput.value = "";
+        deadlineInput.value = "";
+        renderTasks();
+        saveUndoStack();
+      } else {
+        alert("Masukkan tugas terlebih dahulu!");
+      }
+    }
+
+    function toggleDone(index) {
+      undoStack.push(JSON.parse(JSON.stringify(taskList)));
+      taskList[index].done = !taskList[index].done;
+      renderTasks();
+      saveUndoStack();
+    }
+
+    function deleteTask(index) {
+      undoStack.push(JSON.parse(JSON.stringify(taskList)));
+      taskList.splice(index, 1);
+      renderTasks();
+      saveUndoStack();
+    }
+
+    function undoTask() {
+      if (undoStack.length > 0) {
+        taskList = undoStack.pop();
+        renderTasks();
+        saveUndoStack();
+      } else {
+        alert("Tidak ada yang bisa di-undo!");
+      }
+    }
+
+    function resetTask() {
+      if (confirm("Yakin ingin menghapus semua tugas?")) {
+        taskList = [];
+        undoStack = [];
+        saveTasks();
+        saveUndoStack();
+        renderTasks();
+      }
+    }
+
+    function saveTasks() {
+      localStorage.setItem("taskList", JSON.stringify(taskList));
+    }
+
+    function saveUndoStack() {
+      localStorage.setItem("undoStack", JSON.stringify(undoStack));
+    }
+
+    // Render tugas saat halaman dimuat
+    renderTasks();
+  </script>
+</body>
+</html>
